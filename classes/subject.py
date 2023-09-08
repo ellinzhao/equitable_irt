@@ -1,7 +1,9 @@
+import os
+
 import pandas as pd
 from scipy.constants import convert_temperature as conv_temp
 
-from rgb_ir_data import RGB_IR_Data
+from .rgb_ir_data import RGB_IR_Data
 
 
 def _load_df(path):
@@ -42,19 +44,19 @@ def _load_df(path):
 
 
 class Subject:
-    # Assume all data is fps=4
-    # Assume all csv data is in °F
 
-    def __init__(self, sid, csv_path, data_path, units='C'):
-        self.data_path = data_path
-        self.sid = sid
+    def __init__(self, dataset_dir, name, units='C'):
+        self.dataset_dir = dataset_dir
+        self.name = name
         self.units = units
-        self._load_csv_data(csv_path)
-        self.data = RGB_IR_Data(data_path, self.temp_env, self.rh)
+        self._load_csv_data()
+        self.base_data = RGB_IR_Data(dataset_dir, name, 'base', self.temp_env, self.rh)
+        self.cool_data = RGB_IR_Data(dataset_dir, name, 'cool', self.temp_env, self.rh)
 
-    def _load_csv_data(self, csv_path):
+    def _load_csv_data(self):
+        csv_path = os.path.join(self.dataset_dir, 'data.csv')
         df = _load_df(csv_path)
-        data_dir = self.data_path.split('/')[-1]
+        data_dir = self.name
         row = df[df['dir'] == data_dir]
 
         # Skin tone
