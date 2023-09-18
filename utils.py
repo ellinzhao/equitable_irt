@@ -8,20 +8,32 @@ from scipy.constants import convert_temperature as conv_temp
 
 DATETIME_TAG = 36867
 tform = np.genfromtxt('./tform.txt', delimiter=', ')
+rgb2ir = tform
+ir2rgb = np.linalg.pinv(tform)
 
 
 # ######################## IR-RGB processing #########################
 
 def coords_rgb_to_ir(pts):
     x = np.hstack((np.array(pts), np.ones((len(pts), 1))))
-    y = np.dot(tform, x.T)
+    y = np.dot(rgb2ir, x.T)
     return y[:2].astype(int)
+
+
+def coords_ir_to_rgb(pts):
+    x = np.hstack((np.array(pts), np.ones((len(pts), 1))))
+    y = np.dot(ir2rgb, x.T)
+    return y[:2].astype(int).T
 
 
 # ############################# File I/O ##############################
 
 rgb2gray = lambda im: cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
 bgr2rgb = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+
+
+def temp2raw(temp, units='F'):
+    return 100 * conv_temp(temp, units, 'C') + 27315
 
 
 def raw2temp(raw, units='F'):

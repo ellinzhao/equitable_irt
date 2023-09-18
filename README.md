@@ -4,7 +4,8 @@ Assume that all image data is captured at fps=4.
 
 
 ## Directory structure
-|-- dir
+```
+|-- dataset_dir
     |-- data.csv
     |-- data
         |-- subject
@@ -19,10 +20,17 @@ Assume that all image data is captured at fps=4.
         |-- subject
             |-- base.json
             |-- cool.json
-
+    |-- ml_data
+        |-- subject
+            |-- base.csv
+            |-- cool.csv
+            |-- base_ir0.png
+            |-- cool_ir0.png
+```
 
 # `landmark.json` structure
 All points are in the IR image coordinates.
+```
 {
     fname: {
         "rois": {
@@ -33,3 +41,4 @@ All points are in the IR image coordinates.
         }
     }
 }
+```
