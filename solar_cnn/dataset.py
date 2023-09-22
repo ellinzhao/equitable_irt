@@ -1,7 +1,9 @@
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
+import os
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
 from torchvision.utils import make_grid
 from torch.utils.data import Dataset
 
@@ -11,11 +13,29 @@ from utils import raw2temp
 
 class SolarDataset(Dataset):
 
-    def __init__(self, labels, transform=None, train=False):
-        self.labels = labels
+    def __init__(self, dataset_dir, ids, transform=None, train=False):
+        self.dataset_dir = dataset_dir
+        self.ids = ids
         self.transform = transform
         self.train = train
+        self.labels = pd.concat([self._load_sub_labels(sid) for sid in ids])
         self.loader = lambda path: load_im(path, raw2temp).astype(np.float32)
+
+    def _load_sub_labels(self, sid):
+        base_df = pd.read_csv(os.path.join(self.dataset_dir, sid, 'base.csv'))
+        cool_df = pd.read_csv(os.path.join(self.dataset_dir, sid, 'cool.csv'))
+
+        # Remove data after 2 minutes of cooling
+        cool_idx = cool_df['fname'].str.extract('(\d+)').iloc[:, 0]
+        cool_idx = pd.to_numeric(cool_idx)
+        cool_df = cool_df[cool_idx < 4 * 60 *2]
+
+        # Combine base and cool labels and remove NUC data
+        df = pd.concat([base_df, cool_df])
+        df = df[df['nuc_flag'] == 0]
+
+        df['fname'] = df['fname'].apply(lambda x: os.path.join(self.dataset_dir, sid, x))
+        return df
 
     def __len__(self):
         return len(self.labels)
@@ -24,22 +44,18 @@ class SolarDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        fname, y = self.labels.iloc[idx, 1:]
-        frame_num = fname.split('_')[-1].split('.')[0]
-        if int(frame_num) > 800 and self.train:
-            return self.__getitem__(np.random.randint(0, len(self.labels)))
-
+        fname, delta = self.labels[['fname', 'delta']].iloc[idx]
         image = self.loader(fname)
-        y = np.array([y]).astype('float')
+        delta = np.array([delta], dtype=float)
 
-        if self.train:
-            # add fever with probability of 0.3
-            if np.random.uniform() < 0.3:
-                image += np.random.uniform(0, 2)
+        # if self.train:
+        #     # Add fever with probability of 0.3
+        #     if np.random.uniform() < 0.5:
+        #         image += np.random.uniform(1, 2)
 
         if self.transform:
             image = self.transform(image)
-        return image.float()[:, :, :], torch.tensor(y, dtype=torch.float)
+        return image.float()[:, :, :], torch.tensor(delta, dtype=torch.float)
 
     def display_im(img, label):
         plt.imshow(img.permute(1, 2, 0)[:, :, 0])

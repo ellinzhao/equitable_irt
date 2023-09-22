@@ -98,20 +98,17 @@ def plot_losses(history):
 
 
 if __name__ == '__main__':
-    dataset_dir = 'x'  # TODO: set this value
+    # TODO: set this value
+    dataset_dir = 'x'
     pid_folders = os.listdir(dataset_dir)
-    csv_files = []
-    for folder in pid_folders:
-        csv_path = os.path.join(dataset_dir, folder, 'labels.csv')
-        csv_files.append(pd.read_csv(csv_path))
-
-    # Train/Val/Test splits
-    with open('folds.pkl', 'rb') as f:
-        folds = pickle.load(f)
     fold_num = 0
 
-    # INITIALIZATION ##########################
+    # TODO: for now, manually specify the train/val/test split from pid_folders.
+    train_sids = []
+    val_sids = []
+    test_sids = []
 
+    # INITIALIZATION ##########################
     # Define Model + Hyperparameters
     model = SolarRegression(save_str=str(fold_num)).to('cuda')
     num_epochs = 10
@@ -120,23 +117,15 @@ if __name__ == '__main__':
     batch_size = 256
 
     # Datatset + Dataloaders
-    train_indices = folds[fold_num]['train']
-    val_indices = folds[fold_num]['val']
-    test_indices = folds[fold_num]['test']
-
-    train_df = pd.concat([csv_files[i] for i in train_indices])
-    val_df = pd.concat([csv_files[i] for i in val_indices])
-    test_df = pd.concat([csv_files[i] for i in test_indices])
-
     tform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean, std),
         transforms.Resize((64, 64), antialias=None),
     ])
 
-    dataset = SolarDataset(train_df, transform=tform, train=True)
-    val_dataset = SolarDataset(val_df, transform=tform)
-    test_dataset = SolarDataset(test_df, transform=tform)
+    dataset = SolarDataset(dataset_dir, train_sids, transform=tform, train=True)
+    val_dataset = SolarDataset(dataset_dir, val_sids, transform=tform)
+    test_dataset = SolarDataset(dataset_dir, test_sids, transform=tform)
 
     train_dl = DataLoader(dataset, batch_size, shuffle=True)
     val_dl = DataLoader(val_dataset, batch_size, shuffle=True)
