@@ -42,7 +42,7 @@ class RGB_IR_Data:
     ]
 
     def __init__(self, dataset_dir, name, session, temp_env,
-                 correct_nuc=True, align_ir_rgb=True, crop=True, rois=['forehead']):
+                 correct_nuc=True, align_ir_rgb=True, rois=['forehead']):
         assert session in RGB_IR_Data.SESSION_DURATION.keys()
         self.name = name
         self.session = session
@@ -51,10 +51,9 @@ class RGB_IR_Data:
         self.dataset_dir = dataset_dir
 
         self.ir2rgb = ir2rgb
-
         self.landmarks, self.bboxes = self._load_landmarks()
         self.ref_landmarks = self._load_ref_landmarks()
-        self.rois, self.ir, self.rgb = self._load_ir(correct_nuc, align_ir_rgb, crop, rois)
+        self.rois, self.ir, self.rgb = self._load_ir(correct_nuc, align_ir_rgb, rois)
         self.nuc_flag = self._find_nuc()
 
     def _find_nuc(self):
@@ -69,9 +68,9 @@ class RGB_IR_Data:
         nuc_flag[nuc_i] = 1
         return nuc_flag
 
-    def _load_ir(self, correct_nuc, align_ir_rgb, crop, rois):
+    def _load_ir(self, correct_nuc, align_ir_rgb, rois):
         n = self.duration
-        w, h = RGB_IR_Data.CROP_WH if crop else RGB_IR_Data.WH
+        w, h = RGB_IR_Data.CROP_WH
         ir_images = np.zeros((h, w, n))
         rgb_images = np.zeros((h, w, 3, n))
         roi_temps = np.zeros((len(rois), n))
@@ -92,7 +91,7 @@ class RGB_IR_Data:
                 roi_temps[..., i] = self._load_rois(ir, self.bboxes[i], rois)
 
             if align_ir_rgb:
-                ir, rgb = self.align_ir_to_rgb(ir, rgb, self.landmarks[i], crop=crop)
+                ir, rgb = self.align_ir_to_rgb(ir, rgb, self.landmarks[i])
             else:
                 rgb = rgb[:h, :w]
             ir_images[..., i] = ir
@@ -152,17 +151,23 @@ class RGB_IR_Data:
         bg = np.mean(bg)
         return im + (self.temp_env - bg), bg
 
-    def align_ir_to_rgb(self, ir, rgb, ir_landmarks, crop=True):
+    def align_ir_to_rgb(self, ir, rgb, ir_landmarks):
+        w, h = RGB_IR_Data.CROP_WH
+
+        # Warp IR image to align with RGB image based on camera homography.
         ir_warp = cv2.warpPerspective(ir, self.ir2rgb, (ir.shape[1], ir.shape[0]))
-        if crop:
-            rgb_landmarks = coords_ir_to_rgb(ir_landmarks)
-            xmin, ymin = np.min(rgb_landmarks, axis=0)
-            xmax, ymax = np.max(rgb_landmarks, axis=0)
-            ymin = max(0, ymin - 25)    # extra offset for forehead
-            ir_warp = ir_warp[ymin:ymax, xmin:xmax]
-            rgb = rgb[ymin:ymax, xmin:xmax]
-            ir_warp = cv2.resize(ir_warp, (60, 90))
-            rgb = cv2.resize(rgb, (60, 90))
+
+        # Crop IR and RGB image to the face based on detected landmarks
+        rgb_landmarks = coords_ir_to_rgb(ir_landmarks)
+        xmin, ymin = np.min(rgb_landmarks, axis=0)
+        xmax, ymax = np.max(rgb_landmarks, axis=0)
+        ymin = max(0, ymin - 25)    # extra offset for forehead
+        ir_warp = ir_warp[ymin:ymax, xmin:xmax]
+        rgb = rgb[ymin:ymax, xmin:xmax]
+
+        # Resize all face images to the same shape: (90, 60)
+        ir_warp = cv2.resize(ir_warp, (w, h))
+        rgb = cv2.resize(rgb, (w, h))
         return ir_warp, rgb
 
     def save_ir(self):
