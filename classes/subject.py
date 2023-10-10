@@ -46,13 +46,13 @@ def _load_df(path):
 
 class Subject:
 
-    def __init__(self, dataset_dir, name, units='F'):
+    def __init__(self, dataset_dir, name, sn_model=None, units='F'):
         self.dataset_dir = dataset_dir
         self.name = name
         self.units = units
         self._load_csv_data()
-        self.base = RGB_IR_Data(dataset_dir, name, 'base', self.temp_env)
-        self.cool = RGB_IR_Data(dataset_dir, name, 'cool', self.temp_env)
+        self.base = RGB_IR_Data(dataset_dir, name, 'base', self.temp_env, sn_model=sn_model)
+        self.cool = RGB_IR_Data(dataset_dir, name, 'cool', self.temp_env, sn_model=sn_model)
 
     def _load_csv_data(self):
         csv_path = os.path.join(self.dataset_dir, 'data.csv')
@@ -65,7 +65,7 @@ class Subject:
         self.fst = row['FST']
 
         # Environment
-        temp_env = 72.5 if row['temp_env'].empty else row['temp_env']
+        temp_env = [72.5] if row['temp_env'].empty else row['temp_env']
         self.temp_env = conv_temp(temp_env, 'F', self.units)[0]
         self.temp_env = min(self.temp_env, conv_temp(73, 'F', self.units))
         self.rh = row['rh']
@@ -79,29 +79,49 @@ class Subject:
         return 1
 
     def save_dataset(self):
-        os.mkdir(os.path.join(self.dataset_dir, 'ml_data', self.name))
+        # os.mkdir(os.path.join(self.dataset_dir, 'ml_data', self.name))
         self._save_csv()
-        self.base.save_ir()
-        self.cool.save_ir()
+        self._save_aligned_data()
+
+    def _save_aligned_data(self):
+        pass
+        # ixs = list(np.arange(4 * 30, 4 * 40))  # ignore NUCs?
+        # Average landmarks from a few baseline images
+        # base_lms = np.array(self.base.landmarks)[ixs]
+        # base_lms = np.mean(base_lms, axis=0)
+
+        # Align IR images to avg base
+        # self.base.crop_data()
+        # self.cool.crop_data()
+        # self.base.save_dataset()
+        # self.cool.save_dataset()
+
+        # self.base_ir = np.array(self.base.ir_proc)[ixs].mean(axis=0)
+
+        # Since images are aligned, they all have same SNs
+        # ims = np.array(self.base.rgb_proc)[ixs]
+        # normals = []
+        # for im in ims:
+        #     normals += [self.base._surface_normal(im)]
+        # normals = np.mean(normals, axis=0)
+        # sn_path = os.path.join(self.dataset_dir, 'ml_data', self.name, 'sn.npy')
+        # self.rgb_sn = ims
+        # self.sn = normals
+        # np.save(sn_path, normals)
 
     def _save_csv(self):
-        base_gt = self.base.rois['forehead'].mean()
-
         save_path = os.path.join(self.dataset_dir, 'ml_data', self.name, 'base.csv')
         base_df = pd.DataFrame({
             'fname': np.array([f'base_ir{i}.png' for i in range(self.base.duration)]),
-            'base': np.full(self.base.duration, base_gt),
-            'delta': np.zeros(self.base.duration),
             'nuc_flag': self.base.nuc_flag,
+            'face_turned_flag': self.base.face_turned_flag,
         })
         base_df.to_csv(save_path, index=False)
 
-        delta_arr = self.cool.rois['forehead'] - base_gt
         save_path = os.path.join(self.dataset_dir, 'ml_data', self.name, 'cool.csv')
         cool_df = pd.DataFrame({
             'fname': np.array([f'cool_ir{i}.png' for i in range(self.cool.duration)]),
-            'base': np.full(self.cool.duration, base_gt),
-            'delta': delta_arr,
             'nuc_flag': self.cool.nuc_flag,
+            'face_turned_flag': self.cool.face_turned_flag,
         })
         cool_df.to_csv(save_path, index=False)
