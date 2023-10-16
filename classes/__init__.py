@@ -1,5 +1,7 @@
-from .rgb_ir_data import RGB_IR_Data
+from .infrared import Infrared
+from .rgb import RGB
+from .session import Session
 from .subject import Subject
 
 
-__all__ = ['RGB_IR_Data', 'Subject']
+__all__ = ['Infrared', 'RGB', 'Session', 'Subject']

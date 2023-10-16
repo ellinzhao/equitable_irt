@@ -81,35 +81,3 @@ def adjust_gamma(im, gamma=1.0):
         ((i / 255.0)**invGamma) * 255 for i in range(256)
     ]).astype('uint8')
     return cv2.LUT(im, table)
-
-
-def is_symmetrical(lm_list):
-    symmetrical = True
-    if len(lm_list) == 0:
-        return False
-    new_lms = {}
-    for feature in lm_list:
-        pts = lm_list[feature]
-        pts = coords_ir_to_rgb(np.array(pts).T).T
-        new_lms[feature] = pts
-
-    x = []
-    for feature in new_lms:
-        x += list(new_lms[feature][0])
-    symmetryLine = np.min(x) + (np.max(x) - np.min(x)) / 2
-
-    for feature in new_lms:
-        x = new_lms[feature][0]
-        left = np.sum(x < symmetryLine)
-        right = np.sum(x > symmetryLine)
-
-        if feature == 'chin':
-            if min(left, right) == 0:
-                symmetrical = False
-            elif np.abs(left - right) / min(left, right) > 0.4:
-                symmetrical = False
-        elif feature == 'left_eye' and right != 0:
-            symmetrical = False
-        elif feature == 'right_eye' and left != 0:
-            symmetrical = False
-    return symmetrical
