@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 import os
 import pickle
@@ -9,7 +8,7 @@ from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 
 from dataset import SolarDataset
-from model import SolarRegression
+from solar_cnn.cnn import SolarRegression
 
 
 # Set seeds for reproducibility
@@ -121,6 +120,7 @@ if __name__ == '__main__':
         transforms.ToTensor(),
         transforms.Normalize(mean, std),
         transforms.Resize((64, 64), antialias=None),
+        transforms.CenterCrop(60),
     ])
 
     dataset = SolarDataset(dataset_dir, train_sids, transform=tform, train=True)
