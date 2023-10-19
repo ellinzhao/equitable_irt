@@ -4,11 +4,20 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from scipy.constants import convert_temperature as conv_temp
+
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from utils import load_im
-from utils import raw2temp
+
+def raw2temp(raw, units='F'):
+    return conv_temp((raw - 27315) / 100, 'C', units)
+
+
+def load_im(path, transform=None):
+    if not transform:
+        transform = lambda raw: raw
+    return transform(cv2.imread(path, -1))
 
 
 class SolarDataset(Dataset):
@@ -34,6 +43,7 @@ class SolarDataset(Dataset):
         df = pd.concat([base_df, cool_df])
         df['ir_fname'] = df['ir_fname'].apply(lambda x: os.path.join(sid_dir, os.path.basename(x)))
         df['rgb_fname'] = df['rgb_fname'].apply(lambda x: os.path.join(sid_dir, os.path.basename(x)))
+        df['sn_fname'] = df['sn_fname'].apply(lambda x: os.path.join(sid_dir, os.path.basename(x)))
 
         ref_fname = base_df.iloc[4]['ir_fname']
         ref_fname = os.path.basename(ref_fname)
@@ -65,13 +75,13 @@ class SolarDataset(Dataset):
             lvec_full[..., i] = lvec[i]
 
         # Load RGB image as grayscale
-        rgb_fname = self.labels['rgb_fname'].iloc[idx]
-        rgb = load_im(rgb_fname).astype(np.float32)
-        gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+        # rgb_fname = self.labels['rgb_fname'].iloc[idx]
+        # rgb = load_im(rgb_fname).astype(np.float32)
+        # gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
 
         # Use gray image as placeholder in base_ir to make tforms easier
-        ir = np.dstack([ir, gray])
-        base_ir = np.dstack([base_ir, gray])
+        # ir = np.dstack([ir, gray])
+        # base_ir = np.dstack([base_ir, gray])
 
         if self.transform:
             ir = self.transform(ir)
@@ -81,5 +91,9 @@ class SolarDataset(Dataset):
             transforms.ToTensor(),
             transforms.ConvertImageDtype(torch.float32),
         ])
+        if 'base_' in fname:
+            label = torch.tensor([1, 0])
+        else:
+            label = torch.tensor([0, 1])
 
-        return ir, base_ir, sn_tform(sn), sn_tform(lvec_full)
+        return ir, base_ir, sn_tform(sn), sn_tform(lvec_full), label

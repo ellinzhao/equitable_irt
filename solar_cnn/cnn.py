@@ -63,7 +63,7 @@ class SolarRegression(RegressionBase):
 
         self.fc1 = nn.Linear(16 * 8 * 8, 200)
         self.fc2 = nn.Linear(200, 64)
-        self.fc3 = nn.Linear(64, 1)
+        self.fc3 = nn.Linear(64, 2)
 
     def forward(self, x):
         x = (F.relu(self.bn1(self.conv1(x))))
