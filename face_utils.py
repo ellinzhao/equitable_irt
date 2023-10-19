@@ -2,7 +2,9 @@ import json
 
 import cv2
 import numpy as np
+import torch
 from torchvision.transforms import Compose
+from torchvision.transforms import Resize
 from torchvision.transforms import ToTensor
 
 from resnet_unet import model
@@ -25,12 +27,11 @@ SN_MODEL = model
 
 
 def surface_normals(im):
-    tform = Compose([ToTensor()])
-    im_t = im.astype(np.uint8)
-    im_t = tform(im_t).unsqueeze(0)
+    tform = Compose([ToTensor(), Resize((256, 256))])
+    im_t = torch.stack([tform(im[i].astype(np.uint8)) for i in range(len(im))], dim=0)
     normals = SN_MODEL(im_t)[0]
-    normals = np.array(normals[0].data.permute(1, 2, 0).cpu())
-    normals = normals / np.expand_dims(np.sqrt(np.sum(normals**2, axis=2)), 2)
+    normals = np.array(normals.data.permute(0, 2, 3, 1).cpu())
+    normals = normals / np.expand_dims(np.sqrt(np.sum(normals**2, axis=-1)), -1)
     return normals
 
 
