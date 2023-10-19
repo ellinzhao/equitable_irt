@@ -7,7 +7,11 @@ from scipy.constants import convert_temperature as conv_temp
 
 
 DATETIME_TAG = 36867
-tform = np.genfromtxt('./tform.txt', delimiter=', ')
+tform = np.array([
+    [0.8745, 0.0234, -20.4140],
+    [-0.0234, 0.8745, 10.8193],
+    [0, 0, 1.0000],
+])
 rgb2ir = tform
 ir2rgb = np.linalg.pinv(tform)
 
