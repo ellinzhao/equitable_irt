@@ -6,9 +6,9 @@ import imutils
 import json
 import numpy as np
 
-from utils import bgr2rgb
-from utils import load_im
-from utils import coords_rgb_to_ir
+from ..utils import bgr2rgb
+from ..utils import load_im
+from .face_utils import coords_rgb_to_ir
 
 
 MIN_YCrCb = np.array([0, 135, 85], np.uint8)
@@ -119,7 +119,7 @@ def _chin(lms):
 
 
 def find_landmarks(image, num_forehead_landmarks=18):
-    # TODO: replace the following line with `batch_face_locations` (see package docs)
+    # Can process in batches but only matters it GPU is used
     lm_list = face_recognition.face_landmarks(image)
     if len(lm_list) == 0:
         return {}

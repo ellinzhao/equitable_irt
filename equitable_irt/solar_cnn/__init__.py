@@ -1,4 +1,4 @@
-from .autoencoder import ConvAutoencoder
+from .models import ConvAutoencoder
 from .dataset import SolarDataset
 
 

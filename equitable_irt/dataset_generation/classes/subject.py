@@ -1,37 +1,23 @@
 import os
 
-import cv2
-import numpy as np
 import pandas as pd
-from scipy.constants import convert_temperature as conv_temp
 
+from ...utils import conv_temp
 from .session import Session
-from face_utils import crop_resize
-from face_utils import surface_normals
-from utils import temp2raw
 
 
 class Subject:
 
-    def __init__(self, dataset_dir, name, units='F'):
+    def __init__(self, dataset_dir, name, units='F', save_sn=False):
         self.dataset_dir = dataset_dir
         self.name = name
         self.units = units
+        self.save_sn = save_sn
         self.load_csv()
         self.base = Session(dataset_dir, name, 'base', self.temp_env, units=units)
         self.cool = Session(dataset_dir, name, 'cool', self.temp_env, units=units)
-
-        # Align both sessions to one base image
-        ref_i, ref_rgb, face_roi = self.base.rgb.random_im()
-        self.base.align_to_ref(ref_rgb, face_roi)
-        self.cool.align_to_ref(ref_rgb, face_roi)
-
-        # Surface normal model take images of size 256x256
-        ref_rgb_sn = crop_resize(ref_rgb, face_roi, 256)
-        self.ref_sn = cv2.resize(surface_normals(ref_rgb_sn), (64, 64))
-        self.ref_rgb = crop_resize(ref_rgb, face_roi, 64)
-        ref_ir = self.base.ir.warped[..., ref_i:ref_i + 1]
-        self.ref_ir = np.mean(ref_ir, axis=-1)
+        self.base.align_faces(save_sn)
+        self.cool.align_faces(save_sn)
 
     def load_csv(self):
         csv_path = os.path.join(self.dataset_dir, 'data.csv')
@@ -67,7 +53,6 @@ class Subject:
         dateparse = '%m-%d %H:%M'
         df = pd.read_csv(path, header=1, parse_dates=[5], date_format=dateparse)
         df = df.dropna(subset='Colorimeter (E,M)')
-        df = df[3:]
 
         dates = pd.to_datetime(df['Datetime'], format='%m-%d %I:%M').dt
         df['name_lower'] = df['Name'].str.lower()
@@ -89,33 +74,23 @@ class Subject:
         df['rh'] = pd.to_numeric(df['rh'])
 
         df = df[cols]
-        df = df[~df.index.isin([17, 41])]  # Remove bad data
         return df
 
-    def save_dataset(self):
+    def save_dataset(self, save_sn=False):
         save_dir = os.path.join(self.dataset_dir, 'ml_data', self.name)
         os.mkdir(save_dir)
 
-        ref_ir = temp2raw(self.ref_ir).astype(np.uint16)
-        ref_rgb = self.ref_rgb.astype(np.uint8)
-        ref_rgb = cv2.cvtColor(ref_rgb, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(os.path.join(save_dir, 'ref.png'), ref_ir)
-        cv2.imwrite(os.path.join(save_dir, 'ref.jpg'), ref_rgb)
-        np.save(os.path.join(save_dir, 'sn.npy'), self.ref_sn)
-
-        base_fnames = self.base.generate_dataset()
-        cool_fnames = self.cool.generate_dataset()
+        base_fnames = self.base.generate_dataset(save_sn)
+        cool_fnames = self.cool.generate_dataset(save_sn)
 
         save_path = os.path.join(save_dir, 'base.csv')
-        base_df = pd.DataFrame({
-            'ir_fname': base_fnames[:, 0],
-            'rgb_fname': base_fnames[:, 1],
-        })
+        base_df = pd.DataFrame({'ir_fname': base_fnames[:, 0], 'rgb_fname': base_fnames[:, 1]})
+        if save_sn:
+            base_df['sn_fname'] = base_fnames[:, 2]
         base_df.to_csv(save_path, index=False)
 
         save_path = os.path.join(save_dir, 'cool.csv')
-        cool_df = pd.DataFrame({
-            'ir_fname': cool_fnames[:, 0],
-            'rgb_fname': cool_fnames[:, 1],
-        })
+        cool_df = pd.DataFrame({'ir_fname': cool_fnames[:, 0], 'rgb_fname': cool_fnames[:, 1]})
+        if save_sn:
+            cool_df['sn_fname'] = cool_fnames[:, 2]
         cool_df.to_csv(save_path, index=False)

@@ -1,3 +1,5 @@
+Run `pip install -e .` while in this directory.
+
 ## Pipeline
 Assume we have data from a subject in the `0110_name` folder. Make sure the metadata for the subject is in the CSV file.
 1. Detect and save landmarks:

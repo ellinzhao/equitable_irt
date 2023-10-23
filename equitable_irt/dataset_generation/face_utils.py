@@ -7,8 +7,16 @@ from torchvision.transforms import Compose
 from torchvision.transforms import Resize
 from torchvision.transforms import ToTensor
 
-from resnet_unet import model
-from utils import coords_ir_to_rgb
+from .sn_estimation import SN_MODEL
+
+
+tform = np.array([
+    [0.8745, 0.0234, -20.4140],
+    [-0.0234, 0.8745, 10.8193],
+    [0, 0, 1.0000],
+])
+rgb2ir = tform
+ir2rgb = np.linalg.pinv(tform)
 
 
 LANDMARK_LOCS = [
@@ -23,7 +31,18 @@ BBOX_LOCS = [
 
 MATCHER = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 ORB = cv2.ORB_create(5000)
-SN_MODEL = model
+
+
+def coords_rgb_to_ir(pts):
+    x = np.hstack((np.array(pts), np.ones((len(pts), 1))))
+    y = np.dot(rgb2ir, x.T)
+    return y[:2].astype(int)
+
+
+def coords_ir_to_rgb(pts):
+    x = np.hstack((np.array(pts), np.ones((len(pts), 1))))
+    y = np.dot(ir2rgb, x.T)
+    return y[:2].astype(int)
 
 
 def surface_normals(im):
@@ -42,7 +61,7 @@ def is_symmetrical(lms):
     new_lms = {}
     for feature in lms:
         pts = lms[feature]
-        pts = coords_ir_to_rgb(np.array(pts).T).T
+        pts = coords_ir_to_rgb(np.array(pts).T)
         new_lms[feature] = pts
 
     x = []
@@ -70,8 +89,6 @@ def is_symmetrical(lms):
 def flatten_landmarks(dct):
     all_points = []
     for loc in LANDMARK_LOCS:
-        if 'brow' in loc or 'lip' in loc:
-            continue
         points = dct.get(loc)
         points = np.array(points).T  # output: (n_points, 2)
         all_points.extend(points)
@@ -93,7 +110,7 @@ def load_json(json_path, n):
         roi_i = json_i.get('rois', {})
         if 'landmarks' not in json_i:
             print(f'Could not find landmarks: {i}')
-            lms = landmark_pts[-1]
+            lms = [] if i == 0 else landmark_pts[-1]
             symmetric = False
         else:
             lms = flatten_landmarks(json_i.get('landmarks'))
@@ -133,10 +150,11 @@ def align_rgb(im1, im2):
     return M
 
 
-def face_bbox(lms):
-    xmin, ymin = np.min(lms, axis=0)
+def face_bbox(lms, rois):
+    (ymin, _), (_, _) = rois['forehead']  # ymin comes from forehead
+    ymin = max(0, ymin - 7)
+    xmin, _ = np.min(lms, axis=0)
     xmax, ymax = np.max(lms, axis=0)
-    ymin = max(0, ymin - 30)    # extra offset for forehead
     h = ymax - ymin
     w = xmax - xmin
     offset = (h - w) // 2

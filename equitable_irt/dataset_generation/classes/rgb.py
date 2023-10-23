@@ -3,16 +3,16 @@ import os
 import cv2
 import numpy as np
 
-from utils import bgr2rgb
-from utils import load_im
-from face_utils import face_bbox
+from ...utils import bgr2rgb
+from ...utils import load_im
+from ..face_utils import face_bbox
 
 
 class RGB:
 
     WH = (213, 120)
 
-    def __init__(self, dataset_dir, name, session, duration, landmarks, invalid):
+    def __init__(self, dataset_dir, name, session, duration, landmarks, roi_pts, invalid):
         self.dataset_dir = dataset_dir
         self.name = name
         self.session = session
@@ -20,6 +20,7 @@ class RGB:
         self.session_dir = os.path.join(dataset_dir, 'data', name, session)
 
         self.landmarks = landmarks
+        self.roi_pts = roi_pts
         self.invalid = invalid
         self.data = self.load()
 

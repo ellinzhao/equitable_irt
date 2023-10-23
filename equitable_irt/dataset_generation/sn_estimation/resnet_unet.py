@@ -3,7 +3,7 @@ import copy
 import torch
 import torch.nn as nn
 
-from resnet_unet.resnet import resnet18
+from .resnet import resnet18
 
 
 def convrelu(in_channels, out_channels, kernel, padding):
