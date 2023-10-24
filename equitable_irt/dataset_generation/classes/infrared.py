@@ -2,7 +2,6 @@ import os
 
 import cv2
 import numpy as np
-import scipy.signal as sps
 
 from ...utils import conv_temp
 from ...utils import load_im
@@ -43,7 +42,7 @@ class Infrared:
         self.invalid = self.invalid.astype(bool) | self.nuc_flag.astype(bool)
         self.invalid = self.invalid
 
-        self.data = self.correct_nuc()
+        # self.data = self.correct_nuc()
         self.rois = self.extract_rois()
 
         # Aligning IR and RGB only depends on camera homography
@@ -61,17 +60,12 @@ class Infrared:
         return ir_images
 
     def find_nuc_regions(self):
-        n = self.duration
         bg = self.bg
-        # TODO: make the following code agnostic to temp units.
-        peaks, _ = sps.find_peaks(bg, height=self.temp_env + 1.5, width=4 * 5)
-        nuc_i = []
-        for p in peaks:
-            nuc_i.extend(np.arange(max(p - 4 * 5, 0), min(p + 4 * 10, n)))
-        nuc_i = np.array(nuc_i, dtype=int)
-        nuc_flag = np.zeros(n)
-        nuc_flag[nuc_i] = 1
-        return nuc_flag
+        kernel = np.ones(4 * 8, np.uint8)
+        thres = np.percentile(bg, 90)
+        nuc_flag = (bg > thres).astype(np.uint8)
+        nuc_flag = cv2.dilate(nuc_flag, kernel, iterations=1)
+        return nuc_flag.reshape(-1)
 
     def temp_roi(self, im, bbox, agg_fn=np.mean):
         ylim, xlim = bbox
