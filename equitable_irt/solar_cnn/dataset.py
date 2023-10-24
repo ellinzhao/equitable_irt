@@ -4,10 +4,14 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
+from torchvision.transforms import ToTensor
 
 from ..utils import load_im
 from ..utils import raw2temp
+from ..dataset_generation import Infrared
+
+
+LOAD_ROIS = Infrared.LOAD_ROIS
 
 
 class SolarDataset(Dataset):
@@ -19,28 +23,38 @@ class SolarDataset(Dataset):
         self.train = train
         self.loader = lambda path: load_im(path, raw2temp).astype(np.float32)
 
-        dfs_and_ims = [self._load_sub_labels(sid) for sid in ids]
-        labels, ref_ir = list(zip(*dfs_and_ims))
+        labels_data = [self._load_sub_labels(sid) for sid in ids]
+        labels, ref_rois = list(zip(*labels_data))
         self.labels = pd.concat(labels)
-        self.ref_irs = {self.ids[i]: ref_ir[i] for i in range(len(self.ids))}
+        self.ref_rois = {self.ids[i]: ref_rois[i] for i in range(len(self.ids))}
 
     def _load_sub_labels(self, sid):
-        sid_dir = os.path.join(self.dataset_dir, sid)
-        base_df = pd.read_csv(os.path.join(sid_dir, 'base.csv'))
-        cool_df = pd.read_csv(os.path.join(sid_dir, 'cool.csv'))
+        fix_dir = lambda x: os.path.join(self.dataset_dir, sid, x)
+        base_df = pd.read_csv(fix_dir('base.csv'))
+        cool_df = pd.read_csv(fix_dir('cool.csv'))
+        ref_roi_df = pd.read_csv(fix_dir('base_rois.csv'))
+        ref_roi = np.array(ref_roi_df.iloc[0])[1:]
 
         # Combine base and cool labels
         df = pd.concat([base_df, cool_df])
-        fix_dir = lambda x: os.path.join(sid_dir, os.path.basename(x))
         df['ir_fname'] = df['ir_fname'].apply(fix_dir)
         df['rgb_fname'] = df['rgb_fname'].apply(fix_dir)
-        df['sn_fname'] = df['sn_fname'].apply(fix_dir)
+        return df, ref_roi
 
-        ref_fname = base_df.iloc[4]['ir_fname']
-        ref_fname = os.path.basename(ref_fname)
-        ref_fname = os.path.join(sid_dir, ref_fname)
-        ref_ir = self.loader(ref_fname)
-        return df, ref_ir
+    def load_bbox(self, row):
+        pts = []
+        for k in LOAD_ROIS:
+            ymin, ymax, xmin, xmax = row[[f'{k}_ymin', f'{k}_ymax', f'{k}_xmin', f'{k}_xmax']]
+            pts += [(ymin, ymax, xmin, xmax)]
+        return np.array(pts)
+
+    def bbox_mask(self, bboxes, shape):
+        f = len(bboxes)
+        mask = np.zeros((shape[0], shape[1], f))
+        for i in range(f):
+            ymin, ymax, xmin, xmax = bboxes[i]
+            mask[ymin:ymax, xmin:xmax, i] = 1
+        return mask
 
     def __len__(self):
         return len(self.labels)
@@ -49,42 +63,17 @@ class SolarDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
+        row = self.labels.iloc[idx]
+        bbox = self.load_bbox(row)
+        is_base = row['session_type'] == 'base'
+
         # Load IR image
-        fname = self.labels['ir_fname'].iloc[idx]
+        fname = row['ir_fname']
         ir = self.loader(fname)
-        # Load avg baseline IR image
-        base_ir = self.ref_irs[os.path.dirname(fname)]
-        if 'base_' in fname:
-            base_ir = ir
-
-        sn_fname = self.labels['sn_fname'].iloc[idx]
-        sn = np.load(sn_fname)
-        lvec_fname = os.path.join(os.path.dirname(sn_fname), 'lvec.npy')
-        lvec = np.load(lvec_fname)
-        lvec_full = np.ones((64, 64, 3))
-        for i in range(3):
-            lvec_full[..., i] = lvec[i]
-
-        # Load RGB image as grayscale
-        # rgb_fname = self.labels['rgb_fname'].iloc[idx]
-        # rgb = load_im(rgb_fname).astype(np.float32)
-        # gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
-
-        # Use gray image as placeholder in base_ir to make tforms easier
-        # ir = np.dstack([ir, gray])
-        # base_ir = np.dstack([base_ir, gray])
+        ref_rois = self.ref_rois[os.path.basename(os.path.dirname(fname))]
+        mask = self.bbox_mask(bbox, ir.shape)
 
         if self.transform:
             ir = self.transform(ir)
-            base_ir = self.transform(base_ir)
-
-        sn_tform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.ConvertImageDtype(torch.float32),
-        ])
-        if 'base_' in fname:
-            label = torch.tensor([1, 0])
-        else:
-            label = torch.tensor([0, 1])
-
-        return ir, base_ir, sn_tform(sn), sn_tform(lvec_full), label
+            mask = ToTensor()(mask)
+        return ir, ref_rois, mask, is_base
