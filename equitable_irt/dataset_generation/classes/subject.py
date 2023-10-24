@@ -82,6 +82,7 @@ class Subject:
 
         # The Session objects generate dataframes and save all the images
         base_df = self.base.generate_dataset(save_sn)
+        self.base.save_roi_values()
         cool_df = self.cool.generate_dataset(save_sn)
 
         save_path = os.path.join(save_dir, 'base.csv')

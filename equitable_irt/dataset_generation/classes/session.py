@@ -71,6 +71,20 @@ class Session:
             sns += list(batch_sns)
         return sns
 
+    def save_roi_values(self):
+        mean_temps = []
+        invalid = self.ir.invalid
+        for k in self.ir.LOAD_ROIS:
+            temp = np.nanmean(self.ir.rois[k][~invalid])
+            mean_temps += [temp]
+
+        mean_temps = np.array(mean_temps).reshape(1, -1)
+        df = pd.DataFrame(data=mean_temps, columns=self.ir.LOAD_ROIS)
+        save_dir = os.path.join(self.dataset_dir, 'ml_data', self.name,
+                                f'{self.session_type}_rois.csv')
+        df.to_csv(save_dir)
+        return 1
+
     def generate_dataset(self, save_sn):
         session_labels = []
         n = self.duration
