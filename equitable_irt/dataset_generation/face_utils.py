@@ -86,6 +86,19 @@ def is_symmetrical(lms):
     return symmetrical
 
 
+def flatten_rois(rois, face_roi, keys):
+    xmin, ymin, xmax, ymax = face_roi.astype(int)
+    xoffset, yoffset = xmin, ymin
+    curr_w = xmax - xmin
+    arr = []
+    for k in keys:
+        (ymin, ymax), (xmin, xmax) = rois[k]
+        pts = np.array([ymin - yoffset, ymax - yoffset, xmin - xoffset, xmax - xoffset])
+        pts = pts / curr_w * 64  # This is hardcoded for now
+        arr += list(pts.astype(int))
+    return arr
+
+
 def flatten_landmarks(dct):
     all_points = []
     for loc in LANDMARK_LOCS:

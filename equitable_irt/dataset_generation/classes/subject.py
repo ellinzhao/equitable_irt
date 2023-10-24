@@ -16,8 +16,8 @@ class Subject:
         self.load_csv()
         self.base = Session(dataset_dir, name, 'base', self.temp_env, units=units)
         self.cool = Session(dataset_dir, name, 'cool', self.temp_env, units=units)
-        self.base.align_faces(save_sn)
-        self.cool.align_faces(save_sn)
+        self.base.crop_face(save_sn)
+        self.cool.crop_face(save_sn)
 
     def load_csv(self):
         csv_path = os.path.join(self.dataset_dir, 'data.csv')
@@ -80,17 +80,12 @@ class Subject:
         save_dir = os.path.join(self.dataset_dir, 'ml_data', self.name)
         os.mkdir(save_dir)
 
-        base_fnames = self.base.generate_dataset(save_sn)
-        cool_fnames = self.cool.generate_dataset(save_sn)
+        # The Session objects generate dataframes and save all the images
+        base_df = self.base.generate_dataset(save_sn)
+        cool_df = self.cool.generate_dataset(save_sn)
 
         save_path = os.path.join(save_dir, 'base.csv')
-        base_df = pd.DataFrame({'ir_fname': base_fnames[:, 0], 'rgb_fname': base_fnames[:, 1]})
-        if save_sn:
-            base_df['sn_fname'] = base_fnames[:, 2]
         base_df.to_csv(save_path, index=False)
 
         save_path = os.path.join(save_dir, 'cool.csv')
-        cool_df = pd.DataFrame({'ir_fname': cool_fnames[:, 0], 'rgb_fname': cool_fnames[:, 1]})
-        if save_sn:
-            cool_df['sn_fname'] = cool_fnames[:, 2]
         cool_df.to_csv(save_path, index=False)
