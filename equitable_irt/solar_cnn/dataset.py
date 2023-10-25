@@ -16,10 +16,11 @@ LOAD_ROIS = Infrared.LOAD_ROIS
 
 class SolarDataset(Dataset):
 
-    def __init__(self, dataset_dir, ids, transform=None, train=False):
+    def __init__(self, dataset_dir, ids, transform=None, roi_transform=None, train=False):
         self.dataset_dir = dataset_dir
         self.ids = ids
         self.transform = transform
+        self.roi_transform = roi_transform
         self.train = train
         self.loader = lambda path: load_im(path, raw2temp).astype(np.float32)
 
@@ -75,6 +76,6 @@ class SolarDataset(Dataset):
 
         if self.transform:
             ir = self.transform(ir)
-            ref_rois = self.transform(ref_rois)
+            ref_rois = self.roi_transform(ref_rois)
             mask = ToTensor()(mask)
         return ir, ref_rois, mask, is_base
