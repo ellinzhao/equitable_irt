@@ -5,12 +5,8 @@ import torch
 
 
 class conv_block(nn.Module):
-    """
-    Convolution Block 
-    """
     def __init__(self, in_ch, out_ch):
         super(conv_block, self).__init__()
-        
         self.conv = nn.Sequential(
             nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=1, padding=1, bias=True),
             nn.BatchNorm2d(out_ch),
@@ -20,15 +16,11 @@ class conv_block(nn.Module):
             nn.ReLU(inplace=True))
 
     def forward(self, x):
-
         x = self.conv(x)
         return x
 
 
 class up_conv(nn.Module):
-    """
-    Up Convolution Block
-    """
     def __init__(self, in_ch, out_ch):
         super(up_conv, self).__init__()
         self.up = nn.Sequential(
@@ -43,13 +35,9 @@ class up_conv(nn.Module):
         return x
 
 
-class U_Net(nn.Module):
-    """
-    UNet - Basic Implementation
-    Paper : https://arxiv.org/abs/1505.04597
-    """
-    def __init__(self, in_ch=2, out_ch=1):
-        super(U_Net, self).__init__()
+class UNet(nn.Module):
+    def __init__(self, in_ch=1, out_ch=1):
+        super(UNet, self).__init__()
 
         n1 = 64
         filters = [n1, n1 * 2, n1 * 4, n1 * 8, n1 * 16]
@@ -113,5 +101,4 @@ class U_Net(nn.Module):
         d2 = self.Up_conv2(d2)
 
         out = self.Conv(d2)
-
-        return e5, out
+        return out
