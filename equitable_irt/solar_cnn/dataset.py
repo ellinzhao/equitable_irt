@@ -30,8 +30,8 @@ class SolarDataset(Dataset):
 
     def _load_sub_labels(self, sid):
         fix_dir = lambda x: os.path.join(self.dataset_dir, sid, x)
-        base_df = pd.read_csv(fix_dir('base.csv'))
-        cool_df = pd.read_csv(fix_dir('cool.csv'))
+        base_df = pd.read_csv(fix_dir('base.csv')).iloc[:4 * 30]
+        cool_df = pd.read_csv(fix_dir('cool.csv')).iloc[:4 * 30]
         ref_roi_df = pd.read_csv(fix_dir('base_rois.csv'))
         ref_roi = np.array(ref_roi_df.iloc[0])[1:]
 

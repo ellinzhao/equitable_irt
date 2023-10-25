@@ -8,7 +8,7 @@ class ConvAutoencoder(torch.nn.Module):
     def __init__(self):
         super(ConvAutoencoder, self).__init__()
         self.encoder = torch.nn.Sequential(
-            torch.nn.Conv2d(2, 64, 3, stride=1, padding=1),
+            torch.nn.Conv2d(1, 64, 3, stride=1, padding=1),
             torch.nn.ReLU(True),
             torch.nn.Dropout2d(p=0.2),
             torch.nn.MaxPool2d(2, stride=1),
