@@ -75,5 +75,6 @@ class SolarDataset(Dataset):
 
         if self.transform:
             ir = self.transform(ir)
+            ref_rois = self.transform(ref_rois)
             mask = ToTensor()(mask)
         return ir, ref_rois, mask, is_base
