@@ -1,30 +1,8 @@
 Run `pip install -e .` while in this directory.
 
-## Pipeline
-Assume we have data from a subject in the `0110_name` folder. Make sure the metadata for the subject is in the CSV file.
-1. Detect and save landmarks:
-```
-from landmarks_regions import process_dir
+## Data pipeline
+See `dataset_generation`. 
 
-data_dir = '0110_name'
-save_dir = 'lms/'
-lms = process_dir(data_dir, save_dir)
-```
-2. Load data as an instance of `Subject` class, which will clean the data using the landmarks (remove NUC spikes, crop images to the face):
-```
-from classes import Subject
-
-dataset_dir = './'  # folder that contains all the data
-name = '0110_name'
-sub = Subject(dataset_dir, name, units='F')
-```
-
-3. Save new image files to be used by the ML model:
-```
-sub.save_dataset()
-
-# The saved data can be modified in RGB_IR_Data.save_ir()
-```
 
 ## Misc
 - We assume that all CSV data in °F.
