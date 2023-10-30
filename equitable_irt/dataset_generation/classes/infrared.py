@@ -7,6 +7,7 @@ from ...utils import conv_temp
 from ...utils import load_im
 from ...utils import raw2temp
 from ..face_utils import coords_ir_to_rgb
+from ..face_utils import face_bbox
 from ..face_utils import ir2rgb
 from ..face_utils import load_json
 
@@ -35,19 +36,21 @@ class Infrared:
         json_path = os.path.join(dataset_dir, 'landmarks', name, f'{session}.json')
         self.landmarks, self.roi_pts, self.invalid = load_json(json_path, duration)
         self.data = self.load()
+        self.rois = self.extract_rois()
 
-        # Extract and process before aligning to RGB
+        # Aligning IR and RGB only depends on camera homography
+        self.data, self.landmarks, self.roi_pts = self.align_to_rgb()
+
+        # Extract background
         self.bg = self.extract_background()
         self.nuc_flag = self.find_nuc_regions()
         self.invalid = self.invalid.astype(bool) | self.nuc_flag.astype(bool)
         self.invalid = self.invalid
 
-        # self.data = self.correct_nuc()
-        self.rois = self.extract_rois()
-
-        # Aligning IR and RGB only depends on camera homography
-        self.data, self.landmarks, self.roi_pts = self.align_to_rgb()
-        self.aligned = True
+    def _temp_roi(self, im, bbox, agg_fn=np.mean):
+        ylim, xlim = bbox
+        region = im[xlim[0]:xlim[1], ylim[0]:ylim[1]]
+        return agg_fn(region)
 
     def load(self):
         n = self.duration
@@ -59,35 +62,6 @@ class Infrared:
             ir_images[..., i] = ir
         return ir_images
 
-    def find_nuc_regions(self):
-        bg = self.bg
-        kernel = np.ones(4 * 8, np.uint8)
-        thres = np.percentile(bg, 90)
-        nuc_flag = (bg > thres).astype(np.uint8)
-        nuc_flag = cv2.dilate(nuc_flag, kernel, iterations=1)
-        return nuc_flag.reshape(-1)
-
-    def temp_roi(self, im, bbox, agg_fn=np.mean):
-        ylim, xlim = bbox
-        region = im[xlim[0]:xlim[1], ylim[0]:ylim[1]]
-        return agg_fn(region)
-
-    def extract_background(self):
-        temp_bgs = np.zeros(self.duration)
-        thres = conv_temp(90, 'F', self.units)
-        for i in range(self.duration):
-            temp_bg = []
-            frame = self.data[..., i]
-            for roi in self.BG_ROIS:
-                ylim, xlim = roi
-                bg = frame[xlim[0]:xlim[1], ylim[0]:ylim[1]]
-                if bg[bg < thres].size == 0:
-                    temp_bg += [np.nan]
-                else:
-                    temp_bg += [np.nanmean(bg[bg < thres])]
-            temp_bgs[i] = np.nanmean(temp_bg)
-        return temp_bgs
-
     def extract_rois(self):
         temps = np.zeros((len(Infrared.LOAD_ROIS), self.duration))
         for i in range(self.duration):
@@ -96,14 +70,11 @@ class Infrared:
             if len(rois) == 0:
                 temps[..., i] = np.nan
             else:
-                temps[..., i] = [self.temp_roi(frame, rois[loc]) for loc in Infrared.LOAD_ROIS]
+                temps[..., i] = [self._temp_roi(frame, rois[loc]) for loc in Infrared.LOAD_ROIS]
         roi_dict = {}
         for j, loc in enumerate(Infrared.LOAD_ROIS):
             roi_dict[loc] = temps[j]
         return roi_dict
-
-    def correct_nuc(self):
-        return self.data + (self.temp_env - self.bg)
 
     def align_to_rgb(self):
         (w, h), n = Infrared.WH, self.duration
@@ -124,3 +95,33 @@ class Infrared:
                 new_pts[k] = np.array([pts[1], pts[0]])
             rgb_roi_pts += [new_pts]
         return data_warp, rgb_landmarks, rgb_roi_pts
+
+    def extract_background(self):
+        temp_bgs = np.zeros(self.duration)
+        thres = conv_temp(70, 'F', self.units)
+        for i in range(self.duration):
+            frame = self.data[..., i]
+            lms = self.landmarks[i]
+            roi = self.roi_pts[i]
+            if lms is None or len(lms) == 0 or len(roi) == 0:
+                temp_bgs[i] = np.nan
+                continue
+            (ymin, ymax), (xmin, xmax) = face_bbox(lms, roi)
+            ymin = ymin + 10
+            left = frame[:ymin, :xmin]
+            right = frame[:ymin, xmax:160]
+
+            # IR images are aligned, so patches may contain filler 0 values
+            bg = left[left > thres].mean()
+            bg += right[right > thres].mean()
+            bg /= 2
+            temp_bgs[i] = bg
+        return temp_bgs
+
+    def find_nuc_regions(self):
+        bg = self.bg
+        kernel = np.ones(4 * 8, np.uint8)
+        thres = np.percentile(bg, 90)
+        nuc_flag = (bg > thres).astype(np.uint8)
+        nuc_flag = cv2.dilate(nuc_flag, kernel, iterations=1)
+        return nuc_flag.reshape(-1)

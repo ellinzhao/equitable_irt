@@ -165,9 +165,12 @@ def align_rgb(im1, im2):
 
 def face_bbox(lms, rois):
     (ymin, _), (_, _) = rois['forehead']  # ymin comes from forehead
-    ymin = max(0, ymin - 7)
     xmin, _ = np.min(lms, axis=0)
     xmax, ymax = np.max(lms, axis=0)
+    ymin = max(0, ymin - 10)
+    xmin = max(0, xmin - 10)
+    ymax = min(120, ymax + 10)
+    xmax = min(160, xmax + 10)
     h = ymax - ymin
     w = xmax - xmin
     offset = (h - w) // 2
@@ -179,3 +182,24 @@ def face_bbox(lms, rois):
 def crop_resize(im, roi, m=64):
     (xmin, ymin), (xmax, ymax) = roi
     return cv2.resize(im[ymin:ymax, xmin:xmax], (m, m))
+
+
+def frontal_pose(lms):
+    # Accounts for roll and yaw, but not pitch changes
+    # Check symmetry over the chin
+    chin_lms = lms[:17]
+    mid_chin = lms[8, 0]
+    lchin = np.min(chin_lms[:, 0])
+    rchin = np.max(chin_lms[:, 0])
+    width = (rchin - lchin)
+    true_mid = lchin + width / 2
+    offcenter = np.abs(mid_chin - true_mid) / width
+
+    # Check eyes
+    leye_lms = lms[36:42]
+    reye_lms = lms[42:48]
+    lcenter = leye_lms.mean(axis=0)
+    rcenter = reye_lms.mean(axis=0)
+    slope = lcenter - rcenter
+    angle = np.rad2deg(np.arctan(slope[1] / slope[0]))
+    return np.abs(angle) < 4 and offcenter < 0.08

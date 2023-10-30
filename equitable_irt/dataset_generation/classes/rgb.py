@@ -5,7 +5,6 @@ import numpy as np
 
 from ...utils import bgr2rgb
 from ...utils import load_im
-from ..face_utils import face_bbox
 
 
 class RGB:
@@ -34,23 +33,3 @@ class RGB:
             # Later data is full res is not resized so fix this
             frames[..., i] = cv2.resize(im, RGB.WH)
         return frames
-
-    def random_im(self):
-        # Pick an index where next 4 frames are valid.
-        invalid_sec = []
-        for i in range(0, self.duration, 1):
-            j = np.arange(i, i + 1).astype(int)
-            skip = np.any(self.invalid[j])
-            invalid_sec += [skip]
-        idx = np.arange(self.duration / 1)
-        idx = idx[~np.array(invalid_sec)]
-        i = np.random.choice(idx).astype(int) * 1
-
-        roi = face_bbox(self.landmarks[i])
-        (xmin, ymin), (xmax, ymax) = roi
-        w, h = xmax - xmin, ymax - ymin
-        offset = int((h - w) / 2)
-        xmin -= offset
-        xmax += offset
-        square_roi = [(xmin, ymin), (xmax, ymax)]
-        return i, self.data[..., i], square_roi

@@ -1,6 +1,8 @@
 import os
 
+import numpy as np
 import pandas as pd
+from scipy.spatial.distance import cdist
 
 from ...utils import conv_temp
 from .session import Session
@@ -14,10 +16,25 @@ class Subject:
         self.units = units
         self.save_sn = save_sn
         self.load_csv()
-        self.base = Session(dataset_dir, name, 'base', self.temp_env, units=units)
-        self.cool = Session(dataset_dir, name, 'cool', self.temp_env, units=units)
-        self.base.crop_face(save_sn)
-        self.cool.crop_face(save_sn)
+        self.base = Session(dataset_dir, name, 'base', self.temp_env, save_sn, units=units)
+        self.cool = Session(dataset_dir, name, 'cool', self.temp_env, save_sn, units=units)
+
+    def match_lms(self):
+        framei_1 = np.where(self.base.invalid != 1)[0]
+        framei_2 = np.where(self.cool.invalid != 1)[0]
+        lm1 = [self.base.lms_crop[i] for i in framei_1]
+        lm2 = [self.cool.lms_crop[i] for i in framei_2]
+        lm1 = np.array(lm1).reshape(len(lm1), -1)
+        lm2 = np.array(lm2).reshape(len(lm2), -1)
+
+        dists = cdist(lm1, lm2, 'euclidean')
+        min_idx = np.argmin(dists, axis=0).astype(int)
+        min_dist = dists[min_idx, np.arange(dists.shape[1])]  # indices of best base match
+        mask = min_dist < 12
+
+        i1 = framei_1[min_idx[mask]]
+        i2 = framei_2[mask]
+        return i1, i2
 
     def load_csv(self):
         csv_path = os.path.join(self.dataset_dir, 'data.csv')
@@ -80,13 +97,26 @@ class Subject:
         save_dir = os.path.join(self.dataset_dir, 'ml_data', self.name)
         os.mkdir(save_dir)
 
-        # The Session objects generate dataframes and save all the images
-        base_df = self.base.generate_dataset(save_sn)
-        self.base.save_roi_values()
-        cool_df = self.cool.generate_dataset(save_sn)
+        base_idx, cool_idx = self.match_lms()
+        base_ir_fname = [f'base_ir{i}.png' for i in base_idx]
+        cool_ir_fname = [f'cool_ir{i}.png' for i in cool_idx]
+        # Add base images where the ground truth is itself
+        cool_ir_fname += base_ir_fname
+        base_ir_fname += base_ir_fname
 
-        save_path = os.path.join(save_dir, 'base.csv')
-        base_df.to_csv(save_path, index=False)
+        # Repeat for RGB file names
+        base_rgb_fname = [f'base_rgb{i}.png' for i in base_idx]
+        cool_rgb_fname = [f'cool_rgb{i}.png' for i in cool_idx]
+        cool_rgb_fname += base_rgb_fname
+        base_rgb_fname += base_rgb_fname
 
-        save_path = os.path.join(save_dir, 'cool.csv')
-        cool_df.to_csv(save_path, index=False)
+        # Save dataframe with the fnames of paired images
+        df = pd.DataFrame({
+            'ir_fname': cool_ir_fname, 'rgb_fname': cool_rgb_fname,
+            'base_ir_fname': base_ir_fname, 'base_rgb_fname': base_rgb_fname,
+        })
+        df.to_csv(os.path.join(save_dir, 'label.csv'), index=False)
+
+        # The Session objects saves all the images
+        self.base.generate_dataset(np.unique(base_idx))
+        self.cool.generate_dataset(np.unique(cool_idx))
