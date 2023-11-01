@@ -106,6 +106,14 @@ class Session:
 
     def generate_dataset(self, idxs):
         save_dir = os.path.join(self.dataset_dir, 'ml_data', self.name)
+
+        roi_df = pd.DataFrame({
+            'bg': self.ir.bg,
+            'forehead': self.ir.rois['forehead'],
+            'invalid': self.ir.invalid,
+        })
+        roi_df.to_csv(os.path.join(save_dir, f'{self.session_type}_temps.csv'))
+
         for i in idxs:
             if self.invalid[i]:
                 continue

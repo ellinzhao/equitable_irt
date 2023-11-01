@@ -30,10 +30,11 @@ class Subject:
         dists = cdist(lm1, lm2, 'euclidean')
         min_idx = np.argmin(dists, axis=0).astype(int)
         min_dist = dists[min_idx, np.arange(dists.shape[1])]  # indices of best base match
-        mask = min_dist < 12
+        mask = min_dist < 13
 
         i1 = framei_1[min_idx[mask]]
         i2 = framei_2[mask]
+        print('Num matches: ', len(i1))
         return i1, i2
 
     def load_csv(self):
@@ -44,20 +45,21 @@ class Subject:
 
         # Skin tone
         self.colorimeter = row[['E', 'M']]
-        self.fst = row['FST']
+        self.fst = 3 if row['FST'].empty else row['FST'].item()
 
         # Environment
         temp_env = [72.5] if row['temp_env'].empty else row['temp_env']
         self.temp_env = conv_temp(temp_env, 'F', self.units)[0]
         self.temp_env = min(self.temp_env, conv_temp(72.5, 'F', self.units))
-        self.rh = row['rh']
+        self.rh = 40 if row['rh'].empty else row['rh'].item()
 
         # Body temperature (GT and IRTs)
-        self.oral = conv_temp(row['Oral 0'], 'F', self.units)
+        self.oral = conv_temp(row['Oral 0'], 'F', self.units).item()
         self.irt = {}
         for device in ['Purple', 'Sejoy', 'ADC']:
             cols = [f'{device} {i}' for i in range(3)]
-            self.irt[device] = conv_temp(row[cols], 'F', self.units)
+            vals = [float(row[c].item()) for c in cols]
+            self.irt[device] = conv_temp(vals, 'F', self.units).flatten()
         return 1
 
     def clean_df(self, path):
@@ -101,14 +103,16 @@ class Subject:
         base_ir_fname = [f'base_ir{i}.png' for i in base_idx]
         cool_ir_fname = [f'cool_ir{i}.png' for i in cool_idx]
         # Add base images where the ground truth is itself
-        cool_ir_fname += base_ir_fname
-        base_ir_fname += base_ir_fname
+        base_unique = list(set(base_ir_fname))
+        cool_ir_fname += base_unique
+        base_ir_fname += base_unique
 
         # Repeat for RGB file names
         base_rgb_fname = [f'base_rgb{i}.png' for i in base_idx]
         cool_rgb_fname = [f'cool_rgb{i}.png' for i in cool_idx]
-        cool_rgb_fname += base_rgb_fname
-        base_rgb_fname += base_rgb_fname
+        base_unique = list(set(base_rgb_fname))
+        cool_rgb_fname += base_unique
+        base_rgb_fname += base_unique
 
         # Save dataframe with the fnames of paired images
         df = pd.DataFrame({
@@ -116,6 +120,17 @@ class Subject:
             'base_ir_fname': base_ir_fname, 'base_rgb_fname': base_rgb_fname,
         })
         df.to_csv(os.path.join(save_dir, 'label.csv'), index=False)
+
+        # Save subject metadata (skin tone info, environment, etc)
+        metadata = [self.temp_env, self.rh, self.fst]
+        metadata += [self.colorimeter['E'].item(), self.colorimeter['M'].item()]
+        metadata += [self.oral]
+        cols = ['temp_env', 'rh', 'fst', 'E', 'M', 'oral']
+        for device in ['Purple', 'Sejoy', 'ADC']:
+            cols += [f'{device} {i}' for i in range(3)]
+            metadata += list(self.irt[device])
+        meta_df = pd.DataFrame(np.array(metadata).reshape(1, -1), columns=cols)
+        meta_df.to_csv(os.path.join(save_dir, 'metadata.csv'), index=False)
 
         # The Session objects saves all the images
         self.base.generate_dataset(np.unique(base_idx))
