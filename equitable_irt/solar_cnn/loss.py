@@ -26,3 +26,21 @@ class FaceFeatureLoss(nn.Module):
 
         # Should there be a loss involving Tskin or is_base
         return loss
+
+
+class TVLoss(nn.Module):
+
+    def __init__(self, weight=0.1):
+        super(TVLoss, self).__init__()
+        self.weight = weight
+
+    def forward(self, x):
+        b, _, hx, wx = x.size()
+        count_h = self._tensor_size(x[:, :, 1:, :])
+        count_w = self._tensor_size(x[:, :, :, 1:])
+        h_tv = torch.pow((x[:, :, 1:, :] - x[:, :, :hx - 1, :]), 2).sum()
+        w_tv = torch.pow((x[:, :, :, 1:] - x[:, :, :, :wx - 1]), 2).sum()
+        return self.weight * 2 * (h_tv / count_h + w_tv / count_w) / b
+
+    def _tensor_size(self, t):
+        return t.size()[1] * t.size()[2] * t.size()[3]
