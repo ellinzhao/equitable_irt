@@ -186,6 +186,14 @@ def crop_resize(im, roi, m=64):
 
 def frontal_pose(lms):
     # Accounts for roll and yaw, but not pitch changes
+
+    # Check if the face is in frame
+    xmin, ymin = lms.min(axis=0)
+    xmax, ymax = lms.min(axis=0)
+    vertical_check = ymin > 10 and ymax < 120  # forehead and chine not cut off
+    horizontal_check = xmin > 0 and xmax < 160
+    frame_check = vertical_check and horizontal_check
+
     # Check symmetry over the chin
     chin_lms = lms[:17]
     mid_chin = lms[8, 0]
@@ -195,11 +203,11 @@ def frontal_pose(lms):
     true_mid = lchin + width / 2
     offcenter = np.abs(mid_chin - true_mid) / width
 
-    # Check eyes
+    # Check position of eyes
     leye_lms = lms[36:42]
     reye_lms = lms[42:48]
     lcenter = leye_lms.mean(axis=0)
     rcenter = reye_lms.mean(axis=0)
     slope = lcenter - rcenter
     angle = np.rad2deg(np.arctan(slope[1] / slope[0]))
-    return np.abs(angle) < 4 and offcenter < 0.08
+    return frame_check and np.abs(angle) < 10 and offcenter < 0.15
