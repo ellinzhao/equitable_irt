@@ -2,6 +2,7 @@ import os
 
 import cv2
 import numpy as np
+import scipy.signal as sps
 
 from ...utils import conv_temp
 from ...utils import load_im
@@ -107,9 +108,10 @@ class Infrared:
                 temp_bgs[i] = np.nan
                 continue
             (ymin, ymax), (xmin, xmax) = face_bbox(lms, roi)
-            ymin = ymin + 10
+            ymin = int(np.median([ymin, ymax]))
+
             left = frame[:ymin, :xmin]
-            right = frame[:ymin, xmax:160]
+            right = frame[:ymin, xmax:]
 
             # IR images are aligned, so patches may contain filler 0 values
             bg = left[left > thres].mean()
@@ -120,8 +122,17 @@ class Infrared:
 
     def find_nuc_regions(self):
         bg = self.bg
+        flag = np.zeros(len(bg))
+        if np.ptp(bg) < conv_temp(2, 'F', self.units):
+            # No peaks
+            return flag
+        peaks = sps.find_peaks(bg, prominence=1.5, width=(4 * 2, 4 * 30), distance=4 * 5)[0]
+        flag[peaks.astype(int)] = 1
+
+        fhead = self.rois['forehead']
+        peaks = sps.find_peaks(fhead, prominence=1.5, width=(4 * 2, 4 * 30), distance=4 * 5)[0]
+        flag[peaks.astype(int)] = 1
+
         kernel = np.ones(4 * 8, np.uint8)
-        thres = np.percentile(bg, 90)
-        nuc_flag = (bg > thres).astype(np.uint8)
-        nuc_flag = cv2.dilate(nuc_flag, kernel, iterations=1)
-        return nuc_flag.reshape(-1)
+        flag = cv2.dilate(flag, kernel, iterations=2)
+        return flag.reshape(-1)
