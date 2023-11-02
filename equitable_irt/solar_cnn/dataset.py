@@ -1,5 +1,6 @@
 import os
 import random
+import re
 
 import cv2
 import numpy as np
@@ -15,25 +16,49 @@ bgr2gray = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 
 class SolarDataset(Dataset):
 
-    def __init__(self, dataset_dir, ids, num_load=60, transform=None, ir_transform=None, train=False):
+    def __init__(self, dataset_dir, ids, num_load=60, transform=None, train=False, mean=None, std=None):
         self.dataset_dir = dataset_dir
         self.ids = ids
         self.transform = transform
-        self.ir_transform = ir_transform
         self.train = train
         self.num_load = num_load
+
+        # Mean and std for IR data
+        self.mean = mean
+        self.std = std
 
         self.loader = lambda path: load_im(path, raw2temp).astype(np.float32)
         self.gray_loader = lambda path: load_im(path, bgr2gray).astype(np.float32)
         self.labels = pd.concat([self._load_sub_labels(sid) for sid in ids])
 
+    def _fname_index(self, x):
+        session, i = re.findall(r'([a-z]+)_ir(\d+).png', os.path.basename(x))[0]
+        return f'{session}_{i}'
+
     def _load_sub_labels(self, sid):
-        fix_dir = lambda x: os.path.join(self.dataset_dir, sid, x)
-        df = pd.read_csv(fix_dir('label.csv')).iloc[:self.num_load]
-        df['ir_fname'] = df['ir_fname'].apply(fix_dir)
-        df['rgb_fname'] = df['rgb_fname'].apply(fix_dir)
-        df['base_ir_fname'] = df['base_ir_fname'].apply(fix_dir)
-        df['base_rgb_fname'] = df['base_rgb_fname'].apply(fix_dir)
+        sid_dir = lambda x: os.path.join(self.dataset_dir, sid, x)
+
+        # The labels csv has the paired file names
+        df = pd.read_csv(sid_dir('label.csv')).iloc[:self.num_load]
+        df['ir_fname'] = df['ir_fname'].apply(sid_dir)
+        df['rgb_fname'] = df['rgb_fname'].apply(sid_dir)
+        df['base_ir_fname'] = df['base_ir_fname'].apply(sid_dir)
+        df['base_rgb_fname'] = df['base_rgb_fname'].apply(sid_dir)
+        df['session_i'] = df['ir_fname'].apply(self._fname_index)
+        df.set_index('session_i', inplace=True)
+
+        # Load ROI csvs to get forehead and background temps
+        base_df = pd.read_csv(sid_dir('base_temps.csv'))
+        base_df['session_i'] = 'base_' + base_df.iloc[:, 0].apply(str)
+        base_df.set_index('session_i', inplace=True)
+        cool_df = pd.read_csv(sid_dir('cool_temps.csv'))
+        cool_df['session_i'] = 'cool_' + cool_df.iloc[:, 0].apply(str)
+        cool_df.set_index('session_i', inplace=True)
+        roi_df = pd.concat([cool_df, base_df])[['bg', 'forehead']]
+
+        df = pd.merge(df, roi_df, how='left', left_index=True, right_index=True)
+        base_index = df['base_ir_fname'].apply(self._fname_index)
+        df['base_forehead'] = df['forehead'].loc[base_index.values].values
         return df
 
     def __len__(self):
@@ -43,6 +68,11 @@ class SolarDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         row = self.labels.iloc[idx]
+
+        bg = row['bg']
+        # forehead = row['forehead']
+        # base_forehead = row['base_forehead']
+
         # Load IR image
         ir_fname = row['ir_fname']
         ir = self.loader(ir_fname)
@@ -60,11 +90,12 @@ class SolarDataset(Dataset):
             ir += offset
             base_ir += offset
 
-        data_input = np.dstack([ir, gray])
+        data_input = np.dstack([ir, base_ir, gray])
 
         if self.transform:
             data_input = self.transform(data_input)
-            base_ir = self.ir_transform(base_ir)
             session_type = torch.tensor(session_type)
+            bg = (bg - self.mean) / self.std
+            bg = torch.tensor([bg])
 
-        return data_input, base_ir, session_type
+        return data_input, session_type, bg
