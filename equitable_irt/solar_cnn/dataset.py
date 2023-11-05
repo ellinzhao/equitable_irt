@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from torchvision.transforms import Normalize
 from torch.utils.data import Dataset
 
 from ..utils import load_im
@@ -16,19 +17,26 @@ bgr2gray = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 
 class SolarDataset(Dataset):
 
-    def __init__(self, dataset_dir, ids, num_load=60, transform=None, train=False, mean=None, std=None):
+    def __init__(self, dataset_dir, ids, num_load=60, transform=None,
+                 train=False, fever_prob=0.5):
         self.dataset_dir = dataset_dir
         self.ids = ids
         self.transform = transform
         self.train = train
         self.num_load = num_load
+        self.fever_prob = fever_prob
 
         # Mean and std for IR data
-        self.mean = mean
-        self.std = std
+        self.mean = self.std = None
+        if transform:
+            for operation in transform.transforms:
+                if type(operation) is Normalize:
+                    self.mean = operation.mean[0]
+                    self.std = operation.std[0]
+                    break
 
         self.loader = lambda path: load_im(path, raw2temp).astype(np.float32)
-        self.gray_loader = lambda path: load_im(path, bgr2gray).astype(np.float32)
+        self.gray_loader = lambda path: load_im(path)[..., 2].astype(np.float32)
         self.labels = pd.concat([self._load_sub_labels(sid) for sid in ids])
 
     def _fname_index(self, x):
@@ -54,11 +62,12 @@ class SolarDataset(Dataset):
         cool_df = pd.read_csv(sid_dir('cool_temps.csv'))
         cool_df['session_i'] = 'cool_' + cool_df.iloc[:, 0].apply(str)
         cool_df.set_index('session_i', inplace=True)
-        roi_df = pd.concat([cool_df, base_df])[['bg', 'forehead']]
+        roi_df = pd.concat([cool_df, base_df])[['bg', 'forehead', 'ymin', 'ymax', 'xmin', 'xmax']]
 
         df = pd.merge(df, roi_df, how='left', left_index=True, right_index=True)
         base_index = df['base_ir_fname'].apply(self._fname_index)
         df['base_forehead'] = df['forehead'].loc[base_index.values].values
+        df['base_bg'] = df['bg'].loc[base_index.values].values
         return df
 
     def __len__(self):
@@ -70,8 +79,12 @@ class SolarDataset(Dataset):
         row = self.labels.iloc[idx]
 
         bg = row['bg']
-        # forehead = row['forehead']
-        # base_forehead = row['base_forehead']
+        forehead = row['forehead']
+        base_forehead = row['base_forehead']
+        ymin = row['ymin']
+        ymax = row['ymax']
+        xmin = row['xmin']
+        xmax = row['xmax']
 
         # Load IR image
         ir_fname = row['ir_fname']
@@ -81,10 +94,9 @@ class SolarDataset(Dataset):
         session_type = [base_ir_fname == ir_fname, (base_ir_fname != ir_fname)]
 
         rgb_fname = row['rgb_fname']
-        rgb_fname = row['rgb_fname'].replace('.png', '.jpg')  # TODO(ellin): fix this.
         gray = self.gray_loader(rgb_fname)
 
-        if self.train and session_type[0] and random.uniform(0, 1) > 0.5:
+        if self.train and session_type[0] and random.uniform(0, 1) > self.fever_prob:
             # For baseline images, add temp offset to mimic fever
             offset = random.uniform(2, 4)
             ir += offset
@@ -97,5 +109,9 @@ class SolarDataset(Dataset):
             session_type = torch.tensor(session_type)
             bg = (bg - self.mean) / self.std
             bg = torch.tensor([bg])
+            ymin = torch.tensor([ymin])
+            ymax = torch.tensor([ymax])
+            xmin = torch.tensor([xmin])
+            xmax = torch.tensor([xmax])
 
-        return data_input, session_type, bg
+        return data_input, session_type, bg, forehead, base_forehead, ymin, ymax, xmin, xmax
