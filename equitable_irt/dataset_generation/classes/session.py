@@ -40,42 +40,59 @@ class Session:
 
         # Crop all images to the face bbox
         self.crop_face(self.save_sn)
-        self.crop_lms(landmarks, invalid)
+        self.crop_lms(landmarks, invalid, roi_pts)
         self.invalid = invalid
         self.landmarks = landmarks
 
-    def crop_lms(self, landmarks, invalid):
+    def crop_lms(self, landmarks, invalid, rois):
         resized = []
+        resized_rois = []
         for i in range(self.duration):
             lms = landmarks[i]
+            roi_pts = rois[i]['forehead'].T.copy()
+
             if invalid[i] or not frontal_pose(lms):
                 resized += [None]
+                resized_rois += [np.zeros((2, 2))]
                 invalid[i] = True
                 continue
+
+            face_roi = np.array(self.ir.face_roi_crop[i]).astype(int)
+            offset = face_roi[0][:, None]
+            shape = (face_roi[1] - face_roi[0])[:, None]
+
             lms = lms[:27].T.copy()
-            offset = lms.min(axis=1).astype(int)[:, None]
             lms -= offset
-            shape = lms.max(axis=1)[:, None]
             lms = lms / shape * 64
+            roi_pts -= offset[::-1].T
+            roi_pts = roi_pts / shape[::-1].T * 64
             resized += [lms]
+            resized_rois += [roi_pts]
+
         self.lms_crop = resized
+        self.rois_crop = np.array(resized_rois).astype(int)
 
     def crop_face(self, save_sn):
         n = self.duration
         k = 64
         rgb_crop = np.zeros((k, k, 3, n))
         ir_crop = np.zeros((k, k, n))
+        face_roi_crop = []
 
         for i in range(self.duration):
             if self.rgb.invalid[i] or self.rgb.landmarks[i] is None:
+                face_roi_crop += [None]
                 continue
             rgb_i = self.rgb.data[..., i]
             ir_i = self.ir.data[..., i]
             roi_i = face_bbox(self.rgb.landmarks[i], self.rgb.roi_pts[i])
+            face_roi_crop += [roi_i]
             rgb_crop[..., i] = crop_resize(rgb_i, roi_i, k)
             ir_crop[..., i] = crop_resize(ir_i, roi_i, k)
         self.ir.crop = ir_crop
         self.rgb.crop = rgb_crop
+        self.ir.face_roi_crop = face_roi_crop
+
         if save_sn:
             self.normals = self.get_sn()
 
@@ -107,10 +124,16 @@ class Session:
     def generate_dataset(self, idxs):
         save_dir = os.path.join(self.dataset_dir, 'ml_data', self.name)
 
+        ymin, xmin, ymax, xmax = self.rois_crop.reshape(-1, 4).T
+
         roi_df = pd.DataFrame({
             'bg': self.ir.bg,
             'forehead': self.ir.rois['forehead'],
             'invalid': self.ir.invalid,
+            'ymin': ymin,
+            'ymax': ymax,
+            'xmin': xmin,
+            'xmax': xmax,
         })
         roi_df.to_csv(os.path.join(save_dir, f'{self.session_type}_temps.csv'))
 

@@ -108,8 +108,8 @@ class Subject:
         base_ir_fname += base_unique
 
         # Repeat for RGB file names
-        base_rgb_fname = [f'base_rgb{i}.png' for i in base_idx]
-        cool_rgb_fname = [f'cool_rgb{i}.png' for i in cool_idx]
+        base_rgb_fname = [f'base_rgb{i}.jpg' for i in base_idx]
+        cool_rgb_fname = [f'cool_rgb{i}.jpg' for i in cool_idx]
         base_unique = list(set(base_rgb_fname))
         cool_rgb_fname += base_unique
         base_rgb_fname += base_unique
