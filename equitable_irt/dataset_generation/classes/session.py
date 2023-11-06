@@ -49,7 +49,6 @@ class Session:
         resized_rois = []
         for i in range(self.duration):
             lms = landmarks[i]
-            roi_pts = rois[i]['forehead'].T.copy()
 
             if invalid[i] or not frontal_pose(lms):
                 resized += [None]
@@ -57,6 +56,7 @@ class Session:
                 invalid[i] = True
                 continue
 
+            roi_pts = rois[i]['forehead'].T.copy()
             face_roi = np.array(self.ir.face_roi_crop[i]).astype(int)
             offset = face_roi[0][:, None]
             shape = (face_roi[1] - face_roi[0])[:, None]
