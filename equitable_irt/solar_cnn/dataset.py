@@ -44,6 +44,7 @@ class SolarDataset(Dataset):
         return f'{session}_{i}'
 
     def _load_sub_labels(self, sid):
+        # TODO(ellin): clean up this code
         sid_dir = lambda x: os.path.join(self.dataset_dir, sid, x)
 
         # The labels csv has the paired file names
@@ -53,21 +54,30 @@ class SolarDataset(Dataset):
         df['base_ir_fname'] = df['base_ir_fname'].apply(sid_dir)
         df['base_rgb_fname'] = df['base_rgb_fname'].apply(sid_dir)
         df['session_i'] = df['ir_fname'].apply(self._fname_index)
+        df['session_i'] = sid + '_' + df['session_i']
         df.set_index('session_i', inplace=True)
 
         # Load ROI csvs to get forehead and background temps
         base_df = pd.read_csv(sid_dir('base_temps.csv'))
-        base_df['session_i'] = 'base_' + base_df.iloc[:, 0].apply(str)
+        base_df['session_i'] = sid + '_base_' + base_df.iloc[:, 0].apply(str)
         base_df.set_index('session_i', inplace=True)
         cool_df = pd.read_csv(sid_dir('cool_temps.csv'))
-        cool_df['session_i'] = 'cool_' + cool_df.iloc[:, 0].apply(str)
+        cool_df['session_i'] = sid + '_cool_' + cool_df.iloc[:, 0].apply(str)
         cool_df.set_index('session_i', inplace=True)
         roi_df = pd.concat([cool_df, base_df])[['bg', 'forehead', 'ymin', 'ymax', 'xmin', 'xmax']]
 
         df = pd.merge(df, roi_df, how='left', left_index=True, right_index=True)
-        base_index = df['base_ir_fname'].apply(self._fname_index)
+        base_index = sid + '_' + df['base_ir_fname'].apply(self._fname_index)
         df['base_forehead'] = df['forehead'].loc[base_index.values].values
         df['base_bg'] = df['bg'].loc[base_index.values].values
+
+        # There are more SL images than baseline images so duplicate the baseline rows for more data
+        # Base images are randomly turned to fever images, so this ensures there is enough base data
+        if self.train:
+            mask = df.index.str.contains('_base_')
+            base_df = df[mask]
+            base_df.index = base_df.index + '_0'
+            df = pd.concat([df, base_df])
         return df
 
     def __len__(self):
@@ -96,7 +106,7 @@ class SolarDataset(Dataset):
         rgb_fname = row['rgb_fname']
         gray = self.gray_loader(rgb_fname)
 
-        if self.train and session_type[0] and random.uniform(0, 1) > self.fever_prob:
+        if self.train and session_type[0] and random.uniform(0, 1) < self.fever_prob:
             # For baseline images, add temp offset to mimic fever
             offset = random.uniform(2, 4)
             ir += offset
