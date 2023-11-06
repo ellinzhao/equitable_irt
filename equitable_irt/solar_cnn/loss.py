@@ -61,10 +61,10 @@ class MaskedLoss(nn.Module):
         return self.criterion(est_tbase[mask], tbase[mask])
 
 
-class FFTloss(nn.Module):
+class FFTLoss(nn.Module):
 
     def __init__(self, loss_f=nn.L1Loss, reduction='mean'):
-        super(FFTloss, self).__init__()
+        super(FFTLoss, self).__init__()
         self.criterion = loss_f(reduction=reduction)
 
     def forward(self, img1, img2):
