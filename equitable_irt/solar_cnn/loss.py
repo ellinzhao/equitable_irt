@@ -44,3 +44,32 @@ class TVLoss(nn.Module):
 
     def _tensor_size(self, t):
         return t.size()[1] * t.size()[2] * t.size()[3]
+
+
+class MaskedLoss(nn.Module):
+
+    def __init__(self, mode='mse'):
+        super(MaskedLoss, self).__init__()
+        self.mode = mode
+        if self.mode == 'mse':
+            self.criterion = nn.MSELoss()
+        else:
+            self.criterion = nn.L1Loss()
+
+    def forward(self, est_tbase, tbase, tskin, bg):
+        mask = tskin > bg[:, :, None, None]
+        return self.criterion(est_tbase[mask], tbase[mask])
+
+
+class FFTloss(nn.Module):
+
+    def __init__(self, loss_f=nn.L1Loss, reduction='mean'):
+        super(FFTloss, self).__init__()
+        self.criterion = loss_f(reduction=reduction)
+
+    def forward(self, img1, img2):
+        zeros = torch.zeros(img1.size()).to(img1.device)
+        return self.criterion(
+            torch.fft.fft(torch.stack((img1, zeros), -1), 2),
+            torch.fft.fft(torch.stack((img2, zeros), -1), 2),
+        )
