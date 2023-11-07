@@ -18,13 +18,14 @@ bgr2gray = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 class SolarDataset(Dataset):
 
     def __init__(self, dataset_dir, ids, num_load=60, transform=None,
-                 train=False, fever_prob=0.5):
+                 train=False, fever_prob=0.5, session_filter=None):
         self.dataset_dir = dataset_dir
         self.ids = ids
         self.transform = transform
         self.train = train
         self.num_load = num_load
         self.fever_prob = fever_prob
+        self.session_filter = session_filter
 
         # Mean and std for IR data
         self.mean = self.std = None
@@ -78,6 +79,9 @@ class SolarDataset(Dataset):
             base_df = df[mask]
             base_df.index = base_df.index + '_0'
             df = pd.concat([df, base_df])
+        if self.session_filter:
+            mask = df.index.str.contains(f'_{self.session_filter}_')
+            df = df[mask]
         return df
 
     def __len__(self):
