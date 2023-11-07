@@ -48,13 +48,13 @@ class TVLoss(nn.Module):
 
 class MaskedLoss(nn.Module):
 
-    def __init__(self, mode='mse'):
+    def __init__(self, mode='mse', reduction='mean'):
         super(MaskedLoss, self).__init__()
         self.mode = mode
         if self.mode == 'mse':
-            self.criterion = nn.MSELoss()
+            self.criterion = nn.MSELoss(reduction=reduction)
         else:
-            self.criterion = nn.L1Loss()
+            self.criterion = nn.L1Loss(reduction=reduction)
 
     def forward(self, est_tbase, tbase, tskin, bg):
         mask = tskin > bg[:, :, None, None]
