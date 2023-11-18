@@ -16,8 +16,8 @@ from .rgb import RGB
 class Session:
 
     DURATION = {
-        'cool': 2 * 60 * 4,
-        'base': 1 * 60 * 4,
+        'cool': 1 * 60 * 1,
+        'base': 1 * 60 * 2,
     }
 
     def __init__(self, dataset_dir, name, session_type, temp_env, save_sn=False, units='F'):
@@ -124,16 +124,39 @@ class Session:
     def generate_dataset(self, idxs):
         save_dir = os.path.join(self.dataset_dir, 'ml_data', self.name)
 
+        face_pts = []
+        for i in range(self.duration):
+            lms = self.lms_crop[i]
+            roi = self.rois_crop[i]
+            if lms is None:
+                face_pts += [(0, 0, 0, 0)]
+                continue
+            # Points from eyebrows and chin
+            xmin, ymin = lms.min(axis=1)
+            xmax, ymax = lms.max(axis=1)
+            # Points from forehead ROI
+            (ymin, _), (_, _) = roi
+            face_pts += [(ymin, xmin, ymax, xmax)]
+        face_pts = np.round(np.array(face_pts)).astype(int)
+
+        # Face points. This is useful for masking out hair and neck in analysis.
+        face_ymin, face_xmin, face_ymax, face_xmax = face_pts.reshape(-1, 4).T
+
+        # Forehead points
         ymin, xmin, ymax, xmax = self.rois_crop.reshape(-1, 4).T
 
         roi_df = pd.DataFrame({
             'bg': self.ir.bg,
             'forehead': self.ir.rois['forehead'],
             'invalid': self.ir.invalid,
-            'ymin': ymin,
-            'ymax': ymax,
-            'xmin': xmin,
-            'xmax': xmax,
+            'forehead_ymin': ymin,
+            'forehead_ymax': ymax,
+            'forehead_xmin': xmin,
+            'forehead_xmax': xmax,
+            'face_ymin': face_ymin,
+            'face_ymax': face_ymax,
+            'face_xmin': face_xmin,
+            'face_xmax': face_xmax,
         })
         roi_df.to_csv(os.path.join(save_dir, f'{self.session_type}_temps.csv'))
 
@@ -149,3 +172,6 @@ class Session:
             rgb_save_path = f'{self.session_type}_rgb{i}.jpg'
             cv2.imwrite(os.path.join(save_dir, ir_save_path), raw)
             cv2.imwrite(os.path.join(save_dir, rgb_save_path), rgb)
+
+            lms = self.lms_crop[i]
+            np.save(os.path.join(save_dir, f'{self.session_type}_lms{i}.npy'), lms)
