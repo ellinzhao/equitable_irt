@@ -15,7 +15,7 @@ class Subject:
         self.name = name
         self.units = units
         self.save_sn = save_sn
-        self.load_csv()
+        self.df = self.load_csv()
         self.base = Session(dataset_dir, name, 'base', self.temp_env, save_sn, units=units)
         self.cool = Session(dataset_dir, name, 'cool', self.temp_env, save_sn, units=units)
 
@@ -52,6 +52,7 @@ class Subject:
         self.temp_env = conv_temp(temp_env, 'F', self.units)[0]
         self.temp_env = min(self.temp_env, conv_temp(72.5, 'F', self.units))
         self.rh = 40 if row['rh'].empty else row['rh'].item()
+        self.sun = row['Sun 1'].item()
 
         # Body temperature (GT and IRTs)
         self.oral = conv_temp(row['Oral 0'], 'F', self.units).item()
@@ -60,14 +61,14 @@ class Subject:
             cols = [f'{device} {i}' for i in range(3)]
             vals = [float(row[c].item()) for c in cols]
             self.irt[device] = conv_temp(vals, 'F', self.units).flatten()
-        return 1
+        return df
 
     def clean_df(self, path):
         cols = [
             'dir', 'FST', 'E', 'M', 'temp_env', 'rh',
             'Oral 0', 'Purple 0', 'ADC 0', 'Sejoy 0',
             'Purple 1', 'ADC 1', 'Sejoy 1',
-            'Purple 2', 'ADC 2', 'Sejoy 2',
+            'Purple 2', 'ADC 2', 'Sejoy 2', 'Sun 1',
         ]
         dateparse = '%m-%d %H:%M'
         df = pd.read_csv(path, header=1, parse_dates=[5], date_format=dateparse)
