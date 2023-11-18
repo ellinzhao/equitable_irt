@@ -210,4 +210,4 @@ def frontal_pose(lms):
     rcenter = reye_lms.mean(axis=0)
     slope = lcenter - rcenter
     angle = np.rad2deg(np.arctan(slope[1] / slope[0]))
-    return frame_check and np.abs(angle) < 10 and offcenter < 0.15
+    return frame_check and np.abs(angle) < 7 and offcenter < 0.1
