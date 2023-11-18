@@ -28,7 +28,7 @@ class SolarDataset(Dataset):
         self.session_filter = session_filter
 
         # Mean and std for IR data
-        self.mean = self.std = None
+        self.mean, self.std = 0, 1
         if transform:
             for operation in transform.transforms:
                 if type(operation) is Normalize:
