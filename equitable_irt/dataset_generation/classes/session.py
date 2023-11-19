@@ -16,17 +16,21 @@ from .rgb import RGB
 class Session:
 
     DURATION = {
-        'cool': 1 * 60 * 1,
-        'base': 1 * 60 * 2,
+        'cool': 4 * 60 * 5,
+        'base': 4 * 60 * 1,
     }
 
-    def __init__(self, dataset_dir, name, session_type, temp_env, save_sn=False, units='F'):
+    def __init__(self, dataset_dir, name, session_type, temp_env, save_sn=False, units='F',
+                 session_len=None):
         '''
         Loads both IR and RGB data for the specified session.
         '''
         assert session_type in Session.DURATION
         self.session_type = session_type
-        self.duration = Session.DURATION.get(session_type)
+        if session_len is None:
+            self.duration = Session.DURATION.get(session_type)
+        else:
+            self.duration = session_len
         self.units = units
         self.dataset_dir = dataset_dir
         self.name = name

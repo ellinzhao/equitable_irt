@@ -10,14 +10,17 @@ from .session import Session
 
 class Subject:
 
-    def __init__(self, dataset_dir, name, units='F', save_sn=False):
+    def __init__(self, dataset_dir, name, units='F', save_sn=False,
+                 base_len=4 * 60, cool_len=4 * 60 * 5):
         self.dataset_dir = dataset_dir
         self.name = name
         self.units = units
         self.save_sn = save_sn
         self.df = self.load_csv()
-        self.base = Session(dataset_dir, name, 'base', self.temp_env, save_sn, units=units)
-        self.cool = Session(dataset_dir, name, 'cool', self.temp_env, save_sn, units=units)
+        self.base = Session(dataset_dir, name, 'base', self.temp_env, save_sn,
+                            units=units, session_len=base_len)
+        self.cool = Session(dataset_dir, name, 'cool', self.temp_env, save_sn,
+                            units=units, session_len=cool_len)
 
     def match_lms(self):
         framei_1 = np.where(self.base.invalid != 1)[0]
