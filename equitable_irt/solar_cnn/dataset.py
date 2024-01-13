@@ -6,18 +6,24 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from astropy.convolution import convolve
+from astropy.convolution import Gaussian1DKernel
+from scipy.ndimage import laplace
+from torchvision import transforms
 from torchvision.transforms import Normalize
 from torch.utils.data import Dataset
 
+from ..utils import conv_temp
 from ..utils import load_im
 from ..utils import raw2temp
 
+gauss = Gaussian1DKernel(stddev=4)
 bgr2gray = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 
 
 class SolarDataset(Dataset):
 
-    def __init__(self, dataset_dir, ids, num_load=60, transform=None,
+    def __init__(self, dataset_dir, ids, num_load=4 * 60 * 5, transform=None,
                  train=False, fever_prob=0.5, session_filter=None):
         self.dataset_dir = dataset_dir
         self.ids = ids
@@ -35,6 +41,10 @@ class SolarDataset(Dataset):
                     self.mean = operation.mean[0]
                     self.std = operation.std[0]
                     break
+        self.tform2 = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.ConvertImageDtype(torch.float32),
+        ])
 
         self.loader = lambda path: load_im(path, raw2temp).astype(np.float32)
         self.gray_loader = lambda path: load_im(path)[..., 2].astype(np.float32)
@@ -45,7 +55,6 @@ class SolarDataset(Dataset):
         return f'{session}_{i}'
 
     def _load_sub_labels(self, sid):
-        # TODO(ellin): clean up this code
         sid_dir = lambda x: os.path.join(self.dataset_dir, sid, x)
 
         # The labels csv has the paired file names
@@ -62,23 +71,27 @@ class SolarDataset(Dataset):
         base_df = pd.read_csv(sid_dir('base_temps.csv'))
         base_df['session_i'] = sid + '_base_' + base_df.iloc[:, 0].apply(str)
         base_df.set_index('session_i', inplace=True)
+        base_fhead_mean = base_df[~base_df['invalid']]['forehead'].mean()
+
+        # Smooth the forehead labels
         cool_df = pd.read_csv(sid_dir('cool_temps.csv'))
+        y = np.array(cool_df['forehead']).copy()
+        y[cool_df['invalid']] = np.nan
+        yfilt = convolve(y, gauss, preserve_nan=True, boundary='extend')
+        cool_df['forehead'] = yfilt
+
         cool_df['session_i'] = sid + '_cool_' + cool_df.iloc[:, 0].apply(str)
         cool_df.set_index('session_i', inplace=True)
-        roi_df = pd.concat([cool_df, base_df])[['bg', 'forehead', 'ymin', 'ymax', 'xmin', 'xmax']]
+        roi_df = pd.concat([cool_df, base_df])[['bg', 'forehead']]
 
         df = pd.merge(df, roi_df, how='left', left_index=True, right_index=True)
         base_index = sid + '_' + df['base_ir_fname'].apply(self._fname_index)
-        df['base_forehead'] = df['forehead'].loc[base_index.values].values
+        df['base_forehead'] = base_fhead_mean  # df['forehead'].loc[base_index.values].values
         df['base_bg'] = df['bg'].loc[base_index.values].values
 
-        # There are more SL images than baseline images so duplicate the baseline rows for more data
-        # Base images are randomly turned to fever images, so this ensures there is enough base data
-        if self.train:
-            mask = df.index.str.contains('_base_')
-            base_df = df[mask]
-            base_df.index = base_df.index + '_0'
-            df = pd.concat([df, base_df])
+        mask = df.index.str.contains('_base_')
+        df = df[~mask]
+
         if self.session_filter:
             mask = df.index.str.contains(f'_{self.session_filter}_')
             df = df[mask]
@@ -87,45 +100,63 @@ class SolarDataset(Dataset):
     def __len__(self):
         return len(self.labels)
 
+    def _blood(self, im):
+        k = 0.5
+        M = 300
+        Tc = 37
+        Δx = 0.075
+        deriv = laplace(im) / Δx**2
+        ω = (k * deriv - M) / (im - Tc)
+        return ω
+
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         row = self.labels.iloc[idx]
 
         bg = row['bg']
+        base_bg = row['base_bg']
         forehead = row['forehead']
         base_forehead = row['base_forehead']
-        ymin = row['ymin']
-        ymax = row['ymax']
-        xmin = row['xmin']
-        xmax = row['xmax']
 
         # Load IR image
         ir_fname = row['ir_fname']
-        ir = self.loader(ir_fname)
         base_ir_fname = row['base_ir_fname']
-        base_ir = self.loader(base_ir_fname)
         session_type = [base_ir_fname == ir_fname, (base_ir_fname != ir_fname)]
 
-        rgb_fname = row['rgb_fname']
-        gray = self.gray_loader(rgb_fname)
+        sl = 0 if session_type[0] else forehead - base_forehead
+
+        VMIN = 80
+        VMAX = 110
+
+        ir = self.loader(ir_fname)
+        base_ir = self.loader(base_ir_fname)
+        ir_mask = ir <= bg
+        ir[ir_mask] = VMIN
+        base_mask = base_ir <= base_bg
+        base_ir[base_mask] = VMIN
 
         if self.train and session_type[0] and random.uniform(0, 1) < self.fever_prob:
             # For baseline images, add temp offset to mimic fever
             offset = random.uniform(2, 4)
             ir += offset
-            base_ir += offset
+            ir[ir_mask] = VMIN
 
-        data_input = np.dstack([ir, base_ir, gray])
+        if sl <= 0.1:
+            im = np.dstack([ir, ir])
+            sl = 0
+            session_type = [1, 0]
+        else:
+            im = np.dstack([ir, base_ir])
 
-        if self.transform:
-            data_input = self.transform(data_input)
+        im = np.clip(im, VMIN, VMAX)
+        im = conv_temp(im, 'F', 'C')
+        sl = conv_temp(sl, 'F', 'C') - conv_temp(0, 'F', 'C')
+        blood_map = self._blood(base_ir)
+
+        if self.transform is not None:
+            im = self.transform(im)
             session_type = torch.tensor(session_type)
-            bg = (bg - self.mean) / self.std
-            bg = torch.tensor([bg])
-            ymin = torch.tensor([ymin])
-            ymax = torch.tensor([ymax])
-            xmin = torch.tensor([xmin])
-            xmax = torch.tensor([xmax])
-
-        return data_input, session_type, bg, forehead, base_forehead, ymin, ymax, xmin, xmax
+            sl = torch.tensor(sl)
+            blood_map = self.tform2(blood_map)
+        return im, blood_map, session_type, sl
