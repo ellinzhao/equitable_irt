@@ -1,3 +1,1 @@
-https://github.com/ellinzhao/irt-data-collection
-
-https://github.com/ellinzhao/equitable_irt dataset processing code
+This directory contains code for model training. The model was originally trained on Colab on GPUs. The notebook for training the model is `paper_model_training.ipynb`.
