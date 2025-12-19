@@ -1,13 +1,11 @@
 Run `pip install -e .` while in this directory.
 
-## Data pipeline
-See `dataset_generation`. 
+# Dataset generation
 
+The `prepare_dataset.ipynb` notebook is used to generate the data for ML model training.
 
-## Misc
 - We assume that all CSV data in °F.
 - We assume that all image data is captured at fps=4.
-
 
 ## Directory structure
 ```
@@ -48,3 +46,7 @@ All points are in the IR image coordinates.
     }
 }
 ```
+
+# Model training and analysis
+
+Model training and plot generation code is in `ml_training` sub-directory.
